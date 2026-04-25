@@ -1,0 +1,7 @@
+## Managed dependencies for the gateway firmware.
+## Run `idf.py reconfigure` after changing this file.
+dependencies:
+  # IDF version constraint. Tutto è locale: il WebSocket è gestito da
+  # esp_http_server (built-in), nessun client cloud esterno richiesto.
+  idf:
+    version: ">=5.0"

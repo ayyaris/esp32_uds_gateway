@@ -1,0 +1,36 @@
+# =============================================================================
+# ESP32-S3 overrides
+# =============================================================================
+# Applicato IN AGGIUNTA a sdkconfig.defaults quando il target è esp32s3.
+# Usa: idf.py set-target esp32s3
+
+CONFIG_IDF_TARGET="esp32s3"
+
+# -----------------------------------------------------------------------------
+# PSRAM (S3 con 8 MB di Octal PSRAM = ESP32-S3-WROOM-1-N8R8)
+# -----------------------------------------------------------------------------
+# L'S3 supporta Octal PSRAM a 80 MHz, molto più veloce della Quad del classic.
+# Abilitato per permettere buffer firmware grandi durante flash.
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_SPIRAM_TYPE_AUTO=y
+CONFIG_SPIRAM_SPEED_80M=y
+CONFIG_SPIRAM_BOOT_INIT=y
+CONFIG_SPIRAM_USE_MALLOC=y
+CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
+CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=16384
+CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=32768
+
+# -----------------------------------------------------------------------------
+# Flash dimensione tipica dei moduli S3 = 8 MB
+# -----------------------------------------------------------------------------
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="8MB"
+CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
+CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
+
+# -----------------------------------------------------------------------------
+# CPU S3 può arrivare a 240 MHz
+# -----------------------------------------------------------------------------
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ=240

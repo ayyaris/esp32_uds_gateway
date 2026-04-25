@@ -1,0 +1,214 @@
+# =============================================================================
+# ESP32 UDS Gateway — sdkconfig.defaults
+# =============================================================================
+#
+# Questo file contiene i valori NON-DEFAULT per il progetto. ESP-IDF lo applica
+# alla prima configurazione (idf.py build) producendo sdkconfig. Modificabile
+# successivamente via `idf.py menuconfig`.
+#
+# Per target diversi da ESP32 classico, usa sdkconfig.defaults.<target>
+# (es. sdkconfig.defaults.esp32s3). Vedi:
+# https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/kconfig.html
+#
+# Per applicarlo da zero:
+#   rm -f sdkconfig
+#   idf.py set-target esp32
+#   idf.py build
+#
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Target
+# -----------------------------------------------------------------------------
+CONFIG_IDF_TARGET="esp32"
+
+# -----------------------------------------------------------------------------
+# Serial flasher / partition
+# -----------------------------------------------------------------------------
+# Flash 4 MB è lo standard DevKitC. Cambia se hai 8/16 MB.
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="4MB"
+
+# Partition table custom: serve spazio per app + OTA + storage + NVS
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+CONFIG_PARTITION_TABLE_FILENAME="partitions.csv"
+
+# -----------------------------------------------------------------------------
+# FreeRTOS
+# -----------------------------------------------------------------------------
+# Tick rate 1 kHz: i nostri timeout ISO-TP e UDS sono in millisecondi, con
+# 100 Hz un pdMS_TO_TICKS(50) diventa 5 tick = 50 ms ma pdMS_TO_TICKS(5)
+# diventa 0 e il timeout è immediato. Con 1 kHz la granularità è 1 ms.
+CONFIG_FREERTOS_HZ=1000
+
+# Controllo stack overflow con pattern checking (più sensibile del canary).
+# Overhead minimo ma rileva overflow anche quando il danno non ha ancora
+# corrotto strutture critiche.
+CONFIG_FREERTOS_CHECK_STACKOVERFLOW_PTRVAL=y
+CONFIG_FREERTOS_CHECK_STACKOVERFLOW_CANARY=y
+
+# -----------------------------------------------------------------------------
+# System
+# -----------------------------------------------------------------------------
+# Main task stack più ampio: app_main fa parecchio setup (WiFi, TWAI, task creation)
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+
+# System event task stack (handle WiFi events)
+CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE=3072
+
+# -----------------------------------------------------------------------------
+# TWAI (CAN)
+# -----------------------------------------------------------------------------
+# ISR in IRAM riduce il jitter sugli interrupt CAN. Critico per rispettare
+# i timing ISO-TP anche durante flash operations o traffico WiFi intenso.
+CONFIG_TWAI_ISR_IN_IRAM=y
+
+# -----------------------------------------------------------------------------
+# Wi-Fi
+# -----------------------------------------------------------------------------
+# Pinning del WiFi task su Core 0: lasciamo Core 1 per CAN/ISO-TP/UDS
+CONFIG_ESP_WIFI_TASK_PINNED_TO_CORE_0=y
+
+# Buffer WiFi: valori ridotti per lasciare heap al server HTTP e alle code.
+# 16 TX + 16 RX dinamici + 8 RX statici sono sufficienti per uso gateway.
+CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM=16
+CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=16
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=8
+
+# AMPDU: throughput migliore, essenziale per upload firmware
+CONFIG_ESP_WIFI_AMPDU_TX_ENABLED=y
+CONFIG_ESP_WIFI_AMPDU_RX_ENABLED=y
+
+# -----------------------------------------------------------------------------
+# LWIP (TCP/IP)
+# -----------------------------------------------------------------------------
+# Più socket aperti: HTTP server + WebSocket + DNS + altro
+CONFIG_LWIP_MAX_SOCKETS=16
+
+# Send buffer più ampio aiuta quando mandiamo progress e risposte in rapida
+# successione durante il flash
+CONFIG_LWIP_TCP_SND_BUF_DEFAULT=5744
+CONFIG_LWIP_TCP_WND_DEFAULT=5744
+
+# -----------------------------------------------------------------------------
+# ESP-TLS / Certificate bundle
+# -----------------------------------------------------------------------------
+# Abilita il certificate bundle di Mozilla: necessario per wss://
+# con CA pubbliche senza dover embeddare certificati manualmente.
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=y
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_FULL=y
+
+# Abilita ALPN per WSS su alcuni server (es. CloudFlare)
+CONFIG_MBEDTLS_SSL_ALPN=y
+
+# -----------------------------------------------------------------------------
+# HTTP Server (per config.html)
+# -----------------------------------------------------------------------------
+# Abilita il supporto WebSocket nativo in esp_http_server (richiesto da /ws)
+CONFIG_HTTPD_WS_SUPPORT=y
+
+# Header e URI più lunghi per supportare JSON POST body decenti
+CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
+CONFIG_HTTPD_MAX_URI_LEN=512
+
+# -----------------------------------------------------------------------------
+# HTTP Parser
+# -----------------------------------------------------------------------------
+CONFIG_HTTP_BUF_SIZE=1024
+
+# -----------------------------------------------------------------------------
+# PSRAM (abilitare solo su WROVER o moduli con PSRAM esterna)
+# -----------------------------------------------------------------------------
+# Decommentare se usi ESP32-WROVER o simili. Permette di bufferizzare
+# firmware fino a 4 MB in PSRAM per flash operations. Senza PSRAM il
+# buffer è limitato alla RAM interna (~150 KB disponibili).
+#
+# CONFIG_SPIRAM=y
+# CONFIG_SPIRAM_USE_MALLOC=y
+# CONFIG_SPIRAM_TYPE_AUTO=y
+# CONFIG_SPIRAM_SPEED_40M=y
+# CONFIG_SPIRAM_BOOT_INIT=y
+# CONFIG_SPIRAM_IGNORE_NOTFOUND=y
+# CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=16384
+# CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=32768
+
+# -----------------------------------------------------------------------------
+# Log
+# -----------------------------------------------------------------------------
+# Default: Info. In produzione conviene Warn o Error per ridurre overhead.
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+CONFIG_LOG_DEFAULT_LEVEL=3
+CONFIG_LOG_COLORS=y
+CONFIG_LOG_TIMESTAMP_SOURCE_RTOS=y
+
+# -----------------------------------------------------------------------------
+# NVS
+# -----------------------------------------------------------------------------
+# Abilita encryption solo insieme a Flash Encryption (vedi sezione Security)
+# CONFIG_NVS_ENCRYPTION=y
+
+# -----------------------------------------------------------------------------
+# Compilatore / ottimizzazione
+# -----------------------------------------------------------------------------
+# Ottimizza per dimensione (-Os). Per debugging iniziale usa DEBUG (-Og).
+CONFIG_COMPILER_OPTIMIZATION_SIZE=y
+
+# Assertions abilitate in sviluppo. In produzione puoi passare a SILENT.
+CONFIG_COMPILER_OPTIMIZATION_ASSERTIONS_ENABLE=y
+
+# -----------------------------------------------------------------------------
+# ESP32 CPU
+# -----------------------------------------------------------------------------
+# Clock a 240 MHz: necessario per reggere bene 500 kbps CAN + WiFi + TLS
+CONFIG_ESP32_DEFAULT_CPU_FREQ_240=y
+CONFIG_ESP32_DEFAULT_CPU_FREQ_MHZ=240
+
+# XTAL frequency: lascia auto-detect (la maggior parte dei moduli ha 40 MHz)
+CONFIG_XTAL_FREQ_AUTO=y
+
+# -----------------------------------------------------------------------------
+# Watchdog
+# -----------------------------------------------------------------------------
+# Task WDT abilitato ma lascia i task CAN/ISO-TP fuori dalla watchlist
+# perché durante flash possono rimanere long-running. Attento a non
+# allungarlo troppo.
+CONFIG_ESP_TASK_WDT=y
+CONFIG_ESP_TASK_WDT_TIMEOUT_S=15
+CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU0=y
+CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU1=n
+
+# Int WDT per interrupt bloccati
+CONFIG_ESP_INT_WDT=y
+CONFIG_ESP_INT_WDT_TIMEOUT_MS=300
+
+# -----------------------------------------------------------------------------
+# Bootloader
+# -----------------------------------------------------------------------------
+# Log del bootloader ridotto
+CONFIG_BOOTLOADER_LOG_LEVEL_WARN=y
+CONFIG_BOOTLOADER_LOG_LEVEL=2
+
+# -----------------------------------------------------------------------------
+# Security (DISABILITATE in sviluppo — queste bruciano eFuses irreversibilmente!)
+# -----------------------------------------------------------------------------
+# Decommentare SOLO su dispositivi pronti per deploy in produzione,
+# e dopo aver letto attentamente la documentazione:
+# https://docs.espressif.com/projects/esp-idf/en/latest/esp32/security/security-features-enablement-workflows.html
+#
+# Secure Boot V2: verifica firma del firmware ad ogni boot
+# CONFIG_SECURE_BOOT=y
+# CONFIG_SECURE_BOOT_V2_ENABLED=y
+# CONFIG_SECURE_SIGNED_APPS_RSA_SCHEME=y
+#
+# Flash Encryption: cifra il contenuto della flash con AES-256-XTS
+# CONFIG_SECURE_FLASH_ENC_ENABLED=y
+# CONFIG_SECURE_FLASH_ENCRYPTION_MODE_RELEASE=y
+#
+# Disable UART ROM download mode
+# CONFIG_SECURE_DISABLE_ROM_DL_MODE=y
+
+# -----------------------------------------------------------------------------
+# Component manager
+# -----------------------------------------------------------------------------
+CONFIG_IDF_COMPONENT_MANAGER=y

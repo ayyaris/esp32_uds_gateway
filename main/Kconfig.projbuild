@@ -1,0 +1,69 @@
+menu "ESP32 UDS Gateway"
+
+    menu "Wi-Fi defaults (first boot / NVS empty)"
+
+        config GW_WIFI_SSID_DEFAULT
+            string "Default Wi-Fi SSID"
+            default ""
+            help
+                Fallback SSID used on first boot when NVS has no credentials.
+                Leave empty to force AP-mode provisioning via the config UI.
+
+        config GW_WIFI_PASSWORD_DEFAULT
+            string "Default Wi-Fi password"
+            default ""
+            help
+                Fallback password paired with GW_WIFI_SSID_DEFAULT.
+                Do NOT ship production firmware with a real password here.
+
+    endmenu
+
+    menu "CAN transceiver wiring"
+
+        config GW_CAN_TX_GPIO
+            int "CAN TX GPIO"
+            default 27
+            range 0 48
+            help
+                GPIO connected to the CAN transceiver TXD pin (SN65HVD230 pin 3).
+
+        config GW_CAN_RX_GPIO
+            int "CAN RX GPIO"
+            default 26
+            range 0 48
+            help
+                GPIO connected to the CAN transceiver RXD pin (SN65HVD230 pin 4).
+
+        choice GW_CAN_BITRATE_DEFAULT
+            prompt "Default CAN bitrate"
+            default GW_CAN_BITRATE_500K
+            help
+                Used when NVS has no "can_speed" entry. OBD-II standard is 500k.
+
+            config GW_CAN_BITRATE_250K
+                bool "250 kbit/s"
+            config GW_CAN_BITRATE_500K
+                bool "500 kbit/s (OBD-II)"
+            config GW_CAN_BITRATE_1M
+                bool "1 Mbit/s"
+        endchoice
+
+    endmenu
+
+    menu "Safety"
+
+        config GW_SEED_TO_KEY_DEMO
+            bool "Enable demo seed-to-key algorithm (TEST ONLY)"
+            default y
+            help
+                When enabled, registers the test algorithm that matches
+                esp32_ecu_simulator (rotL7(seed XOR 0xA5A5A5A5)). This is
+                NOT compatible with any real OEM ECU.
+
+                For production firmware, disable this and register your
+                OEM-specific algorithm via uds_set_seed_to_key() before
+                connecting to a real vehicle.
+
+    endmenu
+
+endmenu

@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1c1c1e" media="(prefers-color-scheme:dark)">
+<meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme:light)">
+<title>ESP32 UDS Gateway</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<header class="app-bar">
+  <div class="brand">
+    <div class="brand-logo" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><path d="M9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/></svg>
+    </div>
+    <span class="brand-name">UDS Gateway</span>
+  </div>
+  <nav class="app-switch" aria-label="Application">
+    <button class="app-switch-btn" data-app="setup" type="button">Setup</button>
+    <button class="app-switch-btn active" data-app="console" type="button">Console</button>
+  </nav>
+  <div class="conn-badge" id="connBadge" role="status" aria-live="polite">
+    <span class="dot"></span><span class="conn-text">Connecting…</span>
+  </div>
+</header>
+
+<!-- ====================================================================
+     SETUP APP
+     ==================================================================== -->
+<main class="app app-setup" id="app-setup" hidden>
+
+  <aside class="sidebar">
+    <div class="sidebar-section">Setup</div>
+    <div class="nav-item active" data-pane="wifi">
+      <span class="nav-icon blue"><svg viewBox="0 0 24 24"><path d="M12 3C7.58 3 3.53 4.81.36 7.86c-.45.43-.46 1.14-.03 1.58l1.03 1.05c.43.43 1.13.45 1.58.04C5.19 8.28 8.44 7 12 7s6.81 1.28 9.06 3.53c.45.41 1.15.39 1.58-.04l1.03-1.05c.43-.44.42-1.15-.03-1.58C20.47 4.81 16.42 3 12 3zm0 6c-2.72 0-5.23 1.04-7.11 2.87-.45.44-.45 1.15-.02 1.59l1.05 1.07c.43.44 1.13.44 1.58.02C8.7 13.29 10.27 12.67 12 12.67s3.3.62 4.5 1.88c.45.42 1.15.42 1.58-.02l1.05-1.07c.43-.44.43-1.15-.02-1.59C17.23 10.04 14.72 9 12 9zm0 6c-1.45 0-2.78.59-3.73 1.54-.44.43-.43 1.14.01 1.57l2.9 2.94c.45.46 1.19.46 1.64 0l2.9-2.94c.44-.43.45-1.14.01-1.57C14.78 15.59 13.45 15 12 15z"/></svg></span>Wi-Fi
+    </div>
+    <div class="nav-item" data-pane="gateway">
+      <span class="nav-icon purple"><svg viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg></span>Gateway
+    </div>
+    <div class="nav-item" data-pane="can">
+      <span class="nav-icon orange"><svg viewBox="0 0 24 24"><path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm12 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm-1.5-5.5V9.5h2.5l1.96 2.5H16.5z"/></svg></span>CAN Bus
+    </div>
+    <div class="nav-item" data-pane="security">
+      <span class="nav-icon red"><svg viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg></span>Security
+    </div>
+    <div class="sidebar-section">Info</div>
+    <div class="nav-item" data-pane="about">
+      <span class="nav-icon gray"><svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg></span>About
+    </div>
+    <div class="nav-item" data-pane="diagnostics">
+      <span class="nav-icon green"><svg viewBox="0 0 24 24"><path d="M9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/></svg></span>Diagnostics
+    </div>
+  </aside>
+
+  <!-- Wi-Fi -->
+  <section class="pane active" id="pane-wifi">
+    <div class="hero">
+      <div class="hero-logo"><svg viewBox="0 0 24 24"><path d="M12 21l3.5-4h-7L12 21zM12 3C7.58 3 3.53 4.81.36 7.86c-.45.43-.46 1.14-.03 1.58l1.03 1.05c.43.43 1.13.45 1.58.04C5.19 8.28 8.44 7 12 7s6.81 1.28 9.06 3.53c.45.41 1.15.39 1.58-.04l1.03-1.05c.43-.44.42-1.15-.03-1.58C20.47 4.81 16.42 3 12 3z"/></svg></div>
+      <div class="hero-title">Welcome to your Gateway</div>
+      <div class="hero-subtitle">Select a Wi-Fi network to bring the device online.</div>
+    </div>
+    <div class="card">
+      <div class="card-header">Available Networks</div>
+      <div class="wifi-list" id="wifiList"></div>
+      <div class="card-footer">Don't see your network? <a href="#" id="rescanLink">Rescan</a> or enter the SSID manually below.</div>
+    </div>
+    <div class="card">
+      <div class="card-header">Connection</div>
+      <div class="row">
+        <div><div class="row-label">Network Name</div><div class="row-sub">The Wi-Fi SSID to join</div></div>
+        <input type="text" id="ssid" autocomplete="off" placeholder="MyNetwork">
+      </div>
+      <div class="row">
+        <div><div class="row-label">Password</div><div class="row-sub">Leave empty for open networks</div></div>
+        <input type="password" id="pwd" autocomplete="new-password" placeholder="••••••••">
+      </div>
+      <div class="row">
+        <div class="row-label">Hidden Network</div>
+        <label class="toggle"><input type="checkbox" id="hidden"><span class="toggle-slider"></span></label>
+      </div>
+    </div>
+    <div class="footer-actions">
+      <button class="btn btn-secondary" data-action="skip-wifi" type="button">Skip for now</button>
+      <button class="btn btn-primary" id="btnConnectWifi" type="button">Connect</button>
+    </div>
+  </section>
+
+  <!-- Gateway -->
+  <section class="pane" id="pane-gateway">
+    <div class="pane-title">Gateway</div>
+    <div class="pane-subtitle">Local device identity. The diagnostic console connects directly to this ESP32 — no external backend involved.</div>
+    <div class="card">
+      <div class="card-header">Device Identity</div>
+      <div class="row">
+        <div class="row-label">Device Name</div>
+        <input type="text" id="devName" autocomplete="off" placeholder="Gateway-01">
+      </div>
+      <div class="row">
+        <div class="row-label">Device ID (MAC)</div>
+        <span class="row-value mono" id="devMac">—</span>
+      </div>
+      <div class="row">
+        <div class="row-label">Web UI URL</div>
+        <span class="row-value mono" id="devUrl">—</span>
+      </div>
+      <div class="row">
+        <div>
+          <div class="row-label">WebSocket Endpoint</div>
+          <div class="row-sub">Used internally by the Console page</div>
+        </div>
+        <span class="row-value mono">/ws (same origin)</span>
+      </div>
+    </div>
+    <div class="footer-actions">
+      <button class="btn btn-secondary" data-action="test-connection" type="button">Test Connection</button>
+      <button class="btn btn-primary" data-action="save-gateway" type="button">Save</button>
+    </div>
+  </section>
+
+  <!-- CAN Bus -->
+  <section class="pane" id="pane-can">
+    <div class="pane-title">CAN Bus</div>
+    <div class="pane-subtitle">Physical-layer parameters. These must match the vehicle network.</div>
+    <div class="card">
+      <div class="card-header">Bitrate</div>
+      <div class="row">
+        <div>
+          <div class="row-label">CAN Speed</div>
+          <div class="row-sub">500 kbps is standard for OBD-II</div>
+        </div>
+        <select id="canBitrate">
+          <option value="250k">250 kbps</option>
+          <option value="500k" selected>500 kbps</option>
+          <option value="1m">1 Mbps</option>
+        </select>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">Default Addressing</div>
+      <div class="row">
+        <div class="row-label">Request ID (TX)</div>
+        <input type="text" id="canTxId" class="mono" value="0x7E0" autocomplete="off">
+      </div>
+      <div class="row">
+        <div class="row-label">Response ID (RX)</div>
+        <input type="text" id="canRxId" class="mono" value="0x7E8" autocomplete="off">
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">GPIO Pinout</div>
+      <div class="row">
+        <div class="row-label">CAN TX</div>
+        <span class="row-value mono" id="canTxGpio">—</span>
+      </div>
+      <div class="row">
+        <div class="row-label">CAN RX</div>
+        <span class="row-value mono" id="canRxGpio">—</span>
+      </div>
+      <div class="card-footer">
+        GPIOs are set at build time via <code>idf.py menuconfig</code> → <em>ESP32 UDS Gateway</em> → <em>CAN transceiver wiring</em>.
+      </div>
+    </div>
+    <div class="footer-actions">
+      <button class="btn btn-primary" data-action="save-can" type="button">Save · reboot to apply</button>
+    </div>
+  </section>
+
+  <!-- Security -->
+  <section class="pane" id="pane-security">
+    <div class="pane-title">Security</div>
+    <div class="pane-subtitle">Flash write protection and device hardening. Compile-time features are read-only here.</div>
+    <div class="card">
+      <div class="card-header">Arm Button</div>
+      <div class="row">
+        <div>
+          <div class="row-label">Physical Arm Required</div>
+          <div class="row-sub">Flash writes need a physical button press on the device</div>
+        </div>
+        <span class="status-pill ok"><span class="status-dot"></span>Enabled</span>
+      </div>
+      <div class="row">
+        <div class="row-label">GPIO Pin</div>
+        <span class="row-value mono">GPIO 0 (BOOT)</span>
+      </div>
+      <div class="row">
+        <div class="row-label">Arm Window</div>
+        <span class="row-value">30 s after press</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">Firmware Protection</div>
+      <div class="row">
+        <div>
+          <div class="row-label">Secure Boot</div>
+          <div class="row-sub">Verifies firmware signature at every boot</div>
+        </div>
+        <span class="status-pill warn"><span class="status-dot"></span>Not Enabled</span>
+      </div>
+      <div class="row">
+        <div>
+          <div class="row-label">Flash Encryption</div>
+          <div class="row-sub">AES-256-XTS at rest</div>
+        </div>
+        <span class="status-pill warn"><span class="status-dot"></span>Not Enabled</span>
+      </div>
+      <div class="row">
+        <div>
+          <div class="row-label">Seed-to-Key Algorithm</div>
+          <div class="row-sub">Set at compile time (<code>CONFIG_GW_SEED_TO_KEY_DEMO</code>)</div>
+        </div>
+        <span class="status-pill warn" id="secS2k"><span class="status-dot"></span>Demo (test ECU only)</span>
+      </div>
+      <div class="card-footer">Secure Boot and Flash Encryption require one-time eFuse programming and cannot be undone.</div>
+    </div>
+    <div class="footer-actions">
+      <button class="btn btn-destructive" data-action="factory-reset" type="button">Factory Reset</button>
+    </div>
+  </section>
+
+  <!-- About -->
+  <section class="pane" id="pane-about">
+    <div class="pane-title">About</div>
+    <div class="pane-subtitle">System information and firmware version.</div>
+    <div class="card">
+      <div class="card-header">Device</div>
+      <div class="row"><div class="row-label">Chip</div><span class="row-value" id="infoModel">—</span></div>
+      <div class="row"><div class="row-label">MAC Address</div><span class="row-value mono" id="infoMac">—</span></div>
+      <div class="row"><div class="row-label">Flash Size</div><span class="row-value" id="infoFlash">—</span></div>
+    </div>
+    <div class="card">
+      <div class="card-header">Firmware</div>
+      <div class="row"><div class="row-label">Version</div><span class="row-value mono" id="infoVersion">—</span></div>
+      <div class="row"><div class="row-label">Uptime</div><span class="row-value mono" id="infoUptime">—</span></div>
+      <div class="row"><div class="row-label">Free Heap</div><span class="row-value mono" id="infoHeap">—</span></div>
+      <div class="row"><div class="row-label">Min Free Heap</div><span class="row-value mono" id="infoHeapMin">—</span></div>
+    </div>
+  </section>
+
+  <!-- Diagnostics -->
+  <section class="pane" id="pane-diagnostics">
+    <div class="pane-title">Diagnostics</div>
+    <div class="pane-subtitle">Live status of the connection stack.</div>
+    <div class="card">
+      <div class="row"><div class="row-label">Wi-Fi</div><span class="status-pill" id="diagWifi"><span class="status-dot"></span>—</span></div>
+      <div class="row"><div class="row-label">WebSocket (backend)</div><span class="status-pill" id="diagWs"><span class="status-dot"></span>—</span></div>
+      <div class="row"><div class="row-label">CAN Bus</div><span class="status-pill" id="diagCan"><span class="status-dot"></span>—</span></div>
+      <div class="row"><div class="row-label">Arm State</div><span class="status-pill warn" id="diagArm"><span class="status-dot"></span>Disarmed</span></div>
+      <div class="row"><div class="row-label">Flash in Progress</div><span class="status-pill" id="diagFlash"><span class="status-dot"></span>Idle</span></div>
+    </div>
+    <div class="footer-actions">
+      <button class="btn btn-secondary" data-action="reboot" type="button">Reboot</button>
+    </div>
+  </section>
+</main>
+
+<!-- ====================================================================
+     CONSOLE APP
+     ==================================================================== -->
+<main class="app app-console" id="app-console">
+
+  <div class="toolbar">
+    <div class="tb-tabs">
+      <button class="tb-tab active" data-view="overview" type="button">Overview</button>
+      <button class="tb-tab" data-view="live" type="button">Live</button>
+      <button class="tb-tab" data-view="dtc" type="button">DTC</button>
+      <button class="tb-tab" data-view="flash" type="button">Flash</button>
+    </div>
+  </div>
+
+  <aside class="console-sidebar">
+    <div class="sidebar-section">Session</div>
+    <div class="sb-item active"><span class="sb-dot green"></span>
+      <div><div>Engine Control Module</div><div class="sb-meta">0x7E0 → 0x7E8</div></div>
+    </div>
+    <div class="sb-item"><span class="sb-dot"></span>
+      <div><div>Transmission</div><div class="sb-meta">0x7E1 → 0x7E9</div></div>
+    </div>
+    <div class="sb-item"><span class="sb-dot"></span>
+      <div><div>ABS / ESP</div><div class="sb-meta">0x7E2 → 0x7EA</div></div>
+    </div>
+    <div class="sb-item"><span class="sb-dot"></span>
+      <div><div>Body Control</div><div class="sb-meta">0x760 → 0x768</div></div>
+    </div>
+    <div class="sidebar-section">Device</div>
+    <div class="sb-device">
+      <div><span class="mono" id="sbDevName">—</span></div>
+      <div id="sbDevFw">FW —</div>
+      <div id="sbDevUp">Uptime —</div>
+    </div>
+  </aside>
+
+  <!-- Overview -->
+  <section class="view active" id="view-overview">
+    <div class="view-toolbar">
+      <span class="arm-badge" id="armBadge"><span class="ab-dot"></span>Disarmed</span>
+      <div class="spacer"></div>
+      <button class="btn btn-secondary" data-action="clear-dtc" type="button">Clear DTCs</button>
+      <button class="btn btn-primary" data-action="read-vehicle" type="button">Read Vehicle</button>
+    </div>
+    <div class="section">
+      <div class="section-title">Vehicle Status</div>
+      <div class="section-sub">Live telemetry from the connected ECU</div>
+      <div class="card">
+        <div class="metrics">
+          <div class="metric"><div class="metric-label">Engine RPM</div><div class="metric-value" id="mRpm">—</div></div>
+          <div class="metric"><div class="metric-label">Coolant Temp</div><div class="metric-value green" id="mTemp">—</div></div>
+          <div class="metric"><div class="metric-label">Battery</div><div class="metric-value" id="mBatt">—</div></div>
+          <div class="metric"><div class="metric-label">MAF</div><div class="metric-value" id="mMaf">—</div></div>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title">Vehicle Identity</div>
+          <div class="form-row"><div class="form-label">VIN</div><div class="mono" id="ovVin">—</div></div>
+          <div class="form-row"><div class="form-label">ECU Part #</div><div class="mono" id="ovPart">—</div></div>
+          <div class="form-row"><div class="form-label">SW Version</div><div class="mono" id="ovSw">—</div></div>
+          <div class="form-row"><div class="form-label">Protocol</div><div>UDS (ISO 14229) · CAN 500 kbps</div></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Bus Activity</div>
+          <div class="card-body">
+            <div class="bus-stats">
+              <div><div class="muted">Frames / sec</div><div class="mono bus-val" id="busFps">0</div></div>
+              <div style="text-align:right"><div class="muted">Peak</div><div class="mono bus-peak" id="busPeak">0</div></div>
+            </div>
+            <svg class="spark" viewBox="0 0 300 44" preserveAspectRatio="none" aria-hidden="true">
+              <defs>
+                <linearGradient id="sparkGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#0A84FF" stop-opacity="0.4"/>
+                  <stop offset="100%" stop-color="#0A84FF" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+              <path id="sparkFill" d="" fill="url(#sparkGrad)"/>
+              <path id="sparkLine" d="" fill="none" stroke="#0A84FF" stroke-width="1.5"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Diagnostic Trouble Codes</div>
+        <div id="ovDtcList"><div class="empty-state">Click "Read Vehicle" to fetch trouble codes.</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Live CAN -->
+  <section class="view" id="view-live">
+    <div class="view-toolbar">
+      <input type="text" id="liveFilter" placeholder="Filter: ID, data…" class="mono">
+      <select id="liveDir">
+        <option value="all">All frames</option>
+        <option value="rx">RX only</option>
+        <option value="tx">TX only</option>
+      </select>
+      <div class="spacer"></div>
+      <button class="btn btn-ghost" data-action="clear-live" type="button">Clear</button>
+      <button class="btn btn-secondary" data-action="toggle-live" id="liveToggle" type="button">⏸ Pause</button>
+    </div>
+    <div class="section">
+      <div class="card">
+        <div class="log-header"><div>Time</div><div>Dir</div><div>ID</div><div>Data</div><div>Info</div></div>
+        <div class="log" id="frameLog"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- DTC -->
+  <section class="view" id="view-dtc">
+    <div class="section">
+      <div class="section-title">Trouble Codes</div>
+      <div class="section-sub">Fault codes stored across all ECU modules on the bus.</div>
+      <div class="card">
+        <div class="card-title">Engine Control Module</div>
+        <div id="dtcEcm"><div class="empty-state">Click "Read Vehicle" on the Overview to load.</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Flash -->
+  <section class="view" id="view-flash">
+    <div class="section">
+      <div class="flash-hero">
+        <div class="flash-stage" id="flashStage">Ready</div>
+        <div class="flash-title" id="flashTitle">Flash ECU</div>
+        <div class="flash-bar" id="flashBar"><div class="flash-bar-fill" id="flashBarFill"></div></div>
+        <div class="flash-stats">
+          <div><strong id="flashBytes">0</strong> <span class="muted" id="flashBytesTot">/ 0 bytes</span></div>
+          <div id="flashPct">0%</div>
+          <div><span class="muted">ETA</span> <strong id="flashEta">—</strong></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Firmware Image</div>
+        <div class="card-body">
+          <label class="drop" id="dropZone" for="fwFile">
+            <input type="file" id="fwFile" accept=".bin" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
+            <div class="drop-title">Drop firmware .bin here, or click to browse</div>
+            <div class="drop-sub">Up to 8 MB · CRC32 verified on device before flashing</div>
+          </label>
+          <div class="file-info" id="fileInfo" hidden>
+            <div class="file-chip">
+              <div class="file-chip-icon">BIN</div>
+              <div>
+                <div id="fileName">—</div>
+                <div class="file-chip-meta" id="fileMeta">—</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Target Parameters</div>
+        <div class="form-row"><div class="form-label">Request ID</div><input type="text" class="mono" id="flashTxId" value="0x7E0" style="width:120px"></div>
+        <div class="form-row"><div class="form-label">Response ID</div><input type="text" class="mono" id="flashRxId" value="0x7E8" style="width:120px"></div>
+        <div class="form-row"><div class="form-label">Memory Address</div><input type="text" class="mono" id="flashAddr" value="0x08010000" style="width:160px"></div>
+        <div class="form-row">
+          <div class="form-label">Security Level</div>
+          <select id="flashSec" style="width:160px">
+            <option value="0x01">0x01 — Level 1</option>
+            <option value="0x03">0x03 — Level 2</option>
+            <option value="0x05">0x05 — Programming</option>
+          </select>
+        </div>
+        <div class="form-row"><div class="form-label">Erase Routine</div><input type="text" class="mono" id="flashErase" value="0xFF00" style="width:120px"></div>
+        <div class="form-row"><div class="form-label">Check Routine</div><input type="text" class="mono" id="flashCheck" value="0xFF01" style="width:120px"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Sequence</div>
+        <div class="steps" id="steps">
+          <div class="step" data-phase="session"><div class="step-icon">1</div><div><div class="step-label">Open programming session</div><div class="step-sub">DiagnosticSessionControl · 0x10 02</div></div><div class="step-time"></div></div>
+          <div class="step" data-phase="security"><div class="step-icon">2</div><div><div class="step-label">Security access</div><div class="step-sub">SecurityAccess · seed → key</div></div><div class="step-time"></div></div>
+          <div class="step" data-phase="erase"><div class="step-icon">3</div><div><div class="step-label">Erase memory</div><div class="step-sub">RoutineControl · start · erase routine</div></div><div class="step-time"></div></div>
+          <div class="step" data-phase="request_download"><div class="step-icon">4</div><div><div class="step-label">Request download</div><div class="step-sub">RequestDownload · 0x34</div></div><div class="step-time"></div></div>
+          <div class="step" data-phase="transfer"><div class="step-icon">5</div><div><div class="step-label">Transfer data blocks</div><div class="step-sub">TransferData · 0x36 loop</div></div><div class="step-time"></div></div>
+          <div class="step" data-phase="transfer_exit"><div class="step-icon">6</div><div><div class="step-label">Request transfer exit</div><div class="step-sub">RequestTransferExit · 0x37</div></div><div class="step-time"></div></div>
+          <div class="step" data-phase="verify"><div class="step-icon">7</div><div><div class="step-label">Verify dependencies</div><div class="step-sub">RoutineControl · start · check routine</div></div><div class="step-time"></div></div>
+          <div class="step" data-phase="reset"><div class="step-icon">8</div><div><div class="step-label">Reset ECU</div><div class="step-sub">ECUReset · 0x11 01</div></div><div class="step-time"></div></div>
+        </div>
+      </div>
+      <div class="flash-cta">
+        <span class="arm-badge" id="armBadgeFlash"><span class="ab-dot"></span>Press arm button on device</span>
+        <div class="spacer"></div>
+        <button class="btn btn-ghost" data-action="cancel-flash" type="button">Cancel</button>
+        <button class="btn btn-primary" id="flashBtn" type="button">Start Flashing</button>
+      </div>
+      <div class="warn-box">
+        <strong>⚠ Flashing modifies ECU firmware.</strong>
+        Interrupting the process can leave the control unit in an inconsistent state. Keep battery voltage stable (12.5 V+), do not disconnect the OBD cable, and have a recovery plan.
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="toastHost" aria-live="polite" aria-atomic="true"></div>
+<script src="app.js" defer></script>
+</body>
+</html>

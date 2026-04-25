@@ -1,0 +1,33 @@
+idf_component_register(
+    SRCS
+        "main.c"
+        "twai_driver.c"
+        "isotp_layer.c"
+        "uds_service.c"
+        "tester_present.c"
+        "arm_button.c"
+        "status_led.c"
+        "ws_proto.c"
+        "http_server.c"
+        "seed_to_key.c"
+        "gw_nvs.c"
+    INCLUDE_DIRS "."
+    REQUIRES
+        driver
+        esp_driver_rmt
+        esp_wifi
+        esp_event
+        esp_netif
+        esp_hw_support
+        esp_http_server
+        esp_timer
+        json
+        nvs_flash
+        spi_flash
+    PRIV_REQUIRES
+        app_update
+    EMBED_FILES
+        "../webui/index.html"
+        "../webui/app.css"
+        "../webui/app.js"
+)

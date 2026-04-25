@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<title>ESP32 UDS Gateway - Schema Hardware</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+         max-width: 960px; margin: 2em auto; padding: 0 1em; color: #222; line-height: 1.5; }
+  h1 { border-bottom: 2px solid #333; padding-bottom: .3em; }
+  h2 { margin-top: 2em; color: #0a3d62; }
+  code { background: #f4f4f4; padding: 1px 5px; border-radius: 3px; font-size: 0.92em; }
+  table { border-collapse: collapse; margin: 1em 0; }
+  th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: left; }
+  th { background: #eef; }
+  .schema { background: #fafafa; border: 1px solid #ddd; border-radius: 8px;
+            padding: 1em; margin: 1em 0; overflow-x: auto; }
+  .note { background: #fff8dc; border-left: 4px solid #daa520; padding: .6em 1em;
+          margin: 1em 0; }
+  .warn { background: #fde2e2; border-left: 4px solid #c0392b; padding: .6em 1em;
+          margin: 1em 0; }
+  svg { font-family: monospace; font-size: 11px; }
+</style>
+</head>
+<body>
+
+<h1>ESP32 UDS Gateway — Schema Hardware</h1>
+
+<p>Questo documento descrive i collegamenti elettrici necessari per realizzare
+il gateway CAN. Il circuito è minimale: ESP32 + transceiver CAN. Il resto
+è già a bordo della devkit standard.</p>
+
+<h2>Componenti</h2>
+<table>
+  <tr><th>Componente</th><th>Esempio</th><th>Note</th></tr>
+  <tr><td>Microcontrollore</td><td>ESP32-WROOM-32 (devkit)</td>
+      <td>Qualsiasi variante con TWAI: classic, S3, C3, C6. Con PSRAM se flashi firmware grandi.</td></tr>
+  <tr><td>Transceiver CAN</td><td>SN65HVD230 (Texas Instruments)</td>
+      <td>Alimentazione 3.3V nativa (no level shifter). Alternative: TJA1050/1051 a 5V con level shifter.</td></tr>
+  <tr><td>Terminazione</td><td>Resistore 120 Ω</td>
+      <td>Solo se il bus non è già terminato (sul veicolo di solito lo è).</td></tr>
+  <tr><td>Pulsante arm</td><td>Pulsante N.O.</td>
+      <td>Opzionale: la maggior parte delle devkit ha già il BOOT button su GPIO0.</td></tr>
+  <tr><td>Cavo OBD-II</td><td>Connettore SAE J1962</td>
+      <td>Pin 6 = CAN_H, Pin 14 = CAN_L, Pin 5/4 = GND, Pin 16 = +12V (non usato).</td></tr>
+</table>
+
+<div class="warn">
+  <strong>Attenzione alimentazione:</strong> il pin 16 dell'OBD-II fornisce 12V direttamente
+  dalla batteria del veicolo. NON collegarlo all'ESP32. Usa un regolatore DC-DC 12V→5V
+  (o alimenta l'ESP32 da USB separatamente) per evitare danni da transienti.
+</div>
+
+<h2>Schema di collegamento</h2>
+
+<div class="schema">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 480" width="100%">
+  <!-- ESP32 -->
+  <rect x="40" y="120" width="220" height="240" rx="8"
+        fill="#e8f0ff" stroke="#2c3e50" stroke-width="2"/>
+  <text x="150" y="145" text-anchor="middle" font-weight="bold" font-size="14">ESP32 DevKit</text>
+
+  <!-- Pin ESP32 -->
+  <g font-size="11">
+    <text x="55" y="180">3V3</text>
+    <text x="55" y="210">GND</text>
+    <text x="55" y="240">GPIO 21 (TX)</text>
+    <text x="55" y="270">GPIO 22 (RX)</text>
+    <text x="55" y="300">GPIO 0 (ARM)</text>
+    <text x="55" y="340">USB-C (5V in)</text>
+  </g>
+  <g fill="#2c3e50">
+    <circle cx="260" cy="176" r="4"/>
+    <circle cx="260" cy="206" r="4"/>
+    <circle cx="260" cy="236" r="4"/>
+    <circle cx="260" cy="266" r="4"/>
+    <circle cx="260" cy="296" r="4"/>
+  </g>
+
+  <!-- SN65HVD230 -->
+  <rect x="440" y="180" width="180" height="140" rx="8"
+        fill="#ffe8e8" stroke="#c0392b" stroke-width="2"/>
+  <text x="530" y="205" text-anchor="middle" font-weight="bold" font-size="13">SN65HVD230</text>
+  <text x="530" y="222" text-anchor="middle" font-size="10" fill="#666">CAN transceiver 3.3V</text>
+
+  <!-- Pin transceiver -->
+  <g font-size="11">
+    <text x="455" y="250" text-anchor="start">VCC  (1)</text>
+    <text x="455" y="272" text-anchor="start">GND  (2)</text>
+    <text x="455" y="294" text-anchor="start">TXD  (3)</text>
+    <text x="455" y="316" text-anchor="start">RXD  (4)</text>
+    <text x="605" y="250" text-anchor="end">(8) Rs</text>
+    <text x="605" y="272" text-anchor="end">(7) CANH</text>
+    <text x="605" y="294" text-anchor="end">(6) CANL</text>
+    <text x="605" y="316" text-anchor="end">(5) VREF</text>
+  </g>
+  <g fill="#c0392b">
+    <circle cx="440" cy="246" r="4"/>
+    <circle cx="440" cy="268" r="4"/>
+    <circle cx="440" cy="290" r="4"/>
+    <circle cx="440" cy="312" r="4"/>
+    <circle cx="620" cy="268" r="4"/>
+    <circle cx="620" cy="290" r="4"/>
+  </g>
+
+  <!-- Connettore OBD-II -->
+  <rect x="720" y="200" width="120" height="100" rx="8"
+        fill="#e8ffe8" stroke="#27ae60" stroke-width="2"/>
+  <text x="780" y="225" text-anchor="middle" font-weight="bold" font-size="13">OBD-II</text>
+  <text x="780" y="242" text-anchor="middle" font-size="10" fill="#666">SAE J1962</text>
+  <g font-size="11">
+    <text x="735" y="268">Pin 6 CANH</text>
+    <text x="735" y="290">Pin 14 CANL</text>
+  </g>
+  <g fill="#27ae60">
+    <circle cx="720" cy="264" r="4"/>
+    <circle cx="720" cy="286" r="4"/>
+  </g>
+
+  <!-- Cavi -->
+  <!-- 3V3 -->
+  <path d="M 260 176 L 380 176 L 380 246 L 440 246" fill="none" stroke="#d35400" stroke-width="2"/>
+  <text x="340" y="170" font-size="10" fill="#d35400">3.3V</text>
+  <!-- GND -->
+  <path d="M 260 206 L 370 206 L 370 268 L 440 268" fill="none" stroke="#7f8c8d" stroke-width="2"/>
+  <text x="340" y="200" font-size="10" fill="#7f8c8d">GND</text>
+  <!-- TX -->
+  <path d="M 260 236 L 360 236 L 360 290 L 440 290" fill="none" stroke="#2980b9" stroke-width="2"/>
+  <text x="340" y="230" font-size="10" fill="#2980b9">TX</text>
+  <!-- RX -->
+  <path d="M 260 266 L 350 266 L 350 312 L 440 312" fill="none" stroke="#16a085" stroke-width="2"/>
+  <text x="340" y="260" font-size="10" fill="#16a085">RX</text>
+
+  <!-- CANH -->
+  <path d="M 620 268 L 720 264" fill="none" stroke="#8e44ad" stroke-width="2.5"/>
+  <text x="660" y="258" font-size="10" fill="#8e44ad">CAN_H</text>
+  <!-- CANL -->
+  <path d="M 620 290 L 720 286" fill="none" stroke="#8e44ad" stroke-width="2.5"/>
+  <text x="660" y="302" font-size="10" fill="#8e44ad">CAN_L</text>
+
+  <!-- Terminazione 120 ohm -->
+  <g>
+    <line x1="680" y1="264" x2="680" y2="286" stroke="#333" stroke-width="1.5"/>
+    <rect x="672" y="270" width="16" height="10" fill="#fff" stroke="#333" stroke-width="1"/>
+    <text x="695" y="278" font-size="9" fill="#333">120 Ω</text>
+  </g>
+
+  <!-- Pulsante ARM -->
+  <rect x="100" y="390" width="100" height="40" rx="4"
+        fill="#fff6e0" stroke="#b7791f" stroke-width="1.5"/>
+  <text x="150" y="415" text-anchor="middle" font-size="11">Pulsante ARM</text>
+  <path d="M 260 296 L 290 296 L 290 410 L 200 410" fill="none" stroke="#b7791f" stroke-width="1.5"/>
+  <path d="M 100 410 L 60 410 L 60 206 L 260 206" fill="none" stroke="#b7791f" stroke-width="1" stroke-dasharray="4 3"/>
+  <text x="305" y="360" font-size="10" fill="#b7791f">al GND (pull-up interno)</text>
+
+  <!-- Legenda -->
+  <g font-size="10">
+    <text x="40" y="460">Note: se SN65HVD230 Rs (pin 8) è esposto, collegarlo a GND per velocità piena (500k+).</text>
+  </g>
+</svg>
+</div>
+
+<h2>Pinout SN65HVD230 ↔ ESP32</h2>
+<table>
+  <tr><th>Pin TI</th><th>Nome</th><th>Collega a</th><th>Note</th></tr>
+  <tr><td>1</td><td>VCC</td><td>ESP32 3V3</td><td></td></tr>
+  <tr><td>2</td><td>GND</td><td>ESP32 GND</td><td></td></tr>
+  <tr><td>3</td><td>TXD</td><td>ESP32 GPIO21</td><td>configurabile in <code>twai_driver.c</code></td></tr>
+  <tr><td>4</td><td>RXD</td><td>ESP32 GPIO22</td><td>idem</td></tr>
+  <tr><td>5</td><td>VREF</td><td>lasciare aperto</td><td>non usato in normal mode</td></tr>
+  <tr><td>6</td><td>CANL</td><td>bus CAN_L</td><td>via OBD-II pin 14</td></tr>
+  <tr><td>7</td><td>CANH</td><td>bus CAN_H</td><td>via OBD-II pin 6</td></tr>
+  <tr><td>8</td><td>Rs</td><td>GND (via R = 0 Ω)</td><td>high-speed mode. Se a VCC = silent mode.</td></tr>
+</table>
+
+<h2>Pinout OBD-II (J1962)</h2>
+<table>
+  <tr><th>Pin</th><th>Segnale</th><th>Note</th></tr>
+  <tr><td>4</td><td>Chassis GND</td><td></td></tr>
+  <tr><td>5</td><td>Signal GND</td><td>collega ESP32 GND qui</td></tr>
+  <tr><td>6</td><td>CAN-H</td><td></td></tr>
+  <tr><td>14</td><td>CAN-L</td><td></td></tr>
+  <tr><td>16</td><td>+12V batteria</td><td><strong>non collegare all'ESP32</strong></td></tr>
+</table>
+
+<h2>Terminazione</h2>
+<p>Il bus CAN richiede terminazioni da 120 Ω alle due estremità fisiche.
+Sul veicolo le terminazioni sono già presenti (tipicamente una su ECM e
+una su qualche altra centralina). In banco di test con solo ESP32 gateway
++ ESP32 simulatore serve aggiungere 120 Ω tra CAN_H e CAN_L vicino a
+entrambi i transceiver (oppure un singolo 60 Ω se i cavi sono corti).</p>
+
+<div class="note">
+  <strong>Moduli economici con SN65HVD230:</strong> su Aliexpress/Amazon si trovano
+  breakout board che integrano già il transceiver, connettori a vite per CAN_H/CAN_L
+  e un jumper per la terminazione. Costano 2-5 €. Sono perfetti per prototipazione.
+</div>
+
+<h2>CAN-FD</h2>
+<p>L'ESP32 classic ha solo TWAI (CAN 2.0). Per veicoli recenti con CAN-FD
+serve un controller esterno come il <strong>MCP2518FD</strong> collegato via SPI,
+con transceiver <strong>TJA1043</strong> o <strong>MCP2562FD</strong>. L'ESP32-C6 ha un
+TWAI migliorato — verifica le specifiche per il supporto FD nativo.</p>
+
+<h2>Test di continuità</h2>
+<p>Prima di collegare al veicolo, verifica con un multimetro:</p>
+<ul>
+  <li>Continuità GND ESP32 ↔ GND transceiver ↔ GND OBD (pin 5)</li>
+  <li>Continuità GPIO21 ↔ TXD, GPIO22 ↔ RXD</li>
+  <li>Continuità CAN_H transceiver ↔ OBD pin 6, CAN_L ↔ OBD pin 14</li>
+  <li>Assenza di corto tra CAN_H e CAN_L</li>
+  <li>Se presente, terminazione da 120 Ω tra CAN_H e CAN_L</li>
+</ul>
+
+</body>
+</html>
