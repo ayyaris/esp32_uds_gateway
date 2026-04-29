@@ -195,6 +195,11 @@ static void handle_uds_request(const cJSON *root)
     }
     req.tx_id      = parse_hex_u32(j_tx);
     req.rx_id      = parse_hex_u32(j_rx);
+    if (req.tx_id > 0x7FF || req.rx_id > 0x7FF) {
+        send_ack(cJSON_IsString(j_id) ? j_id->valuestring : NULL,
+                 "uds_response", false, "CAN ID out of range (max 0x7FF)");
+        return;
+    }
     req.sid        = (uint8_t)parse_hex_u32(j_sid);
     req.timeout_ms = cJSON_IsNumber(j_to) ? (uint32_t)j_to->valuedouble : 1000;
     if (cJSON_IsString(j_d)) {
@@ -203,6 +208,10 @@ static void handle_uds_request(const cJSON *root)
     }
     if (xQueueSend(q_uds_request, &req, pdMS_TO_TICKS(50)) != pdTRUE) {
         ESP_LOGW(TAG, "q_uds_request full");
+    } else {
+        ESP_LOGW(TAG, "UDS req queued sid=0x%02X tx=0x%03X rx=0x%03X len=%u",
+                 req.sid, (unsigned)req.tx_id, (unsigned)req.rx_id,
+                 (unsigned)req.payload_len);
     }
 }
 
@@ -218,6 +227,13 @@ static void handle_flash_upload_begin(const cJSON *root)
         return;
     }
     uint32_t size = (uint32_t)j_size->valuedouble;
+
+#define FLASH_MAX_SIZE (2 * 1024 * 1024)  /* 2 MB cap per firmware upload */
+    if (size > FLASH_MAX_SIZE) {
+        send_ack(j_id ? j_id->valuestring : NULL,
+                 "flash_upload_begin_ack", false, "firmware too large (max 2 MB)");
+        return;
+    }
 
     if (fw_buffer) { heap_caps_free(fw_buffer); fw_buffer = NULL; }
 
@@ -353,6 +369,11 @@ static void handle_flash_start(const cJSON *root)
     }
     flash_tx_id        = parse_hex_u32(cJSON_GetObjectItem(root, "tx_id"));
     flash_rx_id        = parse_hex_u32(cJSON_GetObjectItem(root, "rx_id"));
+    if (flash_tx_id > 0x7FF || flash_rx_id > 0x7FF) {
+        send_ack(j_id ? j_id->valuestring : NULL,
+                 "flash_start_ack", false, "CAN ID out of range (max 0x7FF)");
+        return;
+    }
     flash_addr         = parse_hex_u32(cJSON_GetObjectItem(root, "address"));
     flash_sec_level    = (uint8_t)parse_hex_u32(cJSON_GetObjectItem(root, "security_level"));
     flash_erase_rid    = parse_hex_u32(cJSON_GetObjectItem(root, "erase_routine_id"));

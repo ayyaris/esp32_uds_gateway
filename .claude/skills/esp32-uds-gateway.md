@@ -68,10 +68,16 @@ main/
                         and extern queue handles
   main.c             — queue creation, task creation, Wi-Fi init
   twai_driver.c      — CAN RX/TX loop; pushes to q_can_monitor for live monitor
+                        (every frame RX and TX gets a can_monitor_frame_t)
   isotp_layer.c      — ISO-TP segmentation/reassembly + FC address logic
-  uds_service.c      — UDS services: 0x10 0x11 0x22 0x23 0x27 0x2E 0x31 0x34-0x37
+  uds_service.c      — UDS services: 0x10 0x11 0x14 0x19 0x22 0x23 0x27
+                        0x2E 0x31 0x34-0x37 (0x3D handled browser-side only)
   ws_proto.c         — JSON parser (browser → firmware) + pump task
-                        (q_uds_response + q_can_monitor → WebSocket)
+                        send_can_frame_json() pushes can_frame broadcasts
+                        ws_proto_pump_task uses 20 ms timeout to drain
+                        q_can_monitor between UDS responses
+                        tx_id/rx_id validated ≤ 0x7FF before queuing (all
+                        frames use standard 11-bit CAN via isotp_layer)
   http_server.c      — HTTP + WebSocket server; REST API: /api/config /api/status
                         /api/scan /api/wifi /api/reboot /api/factory-reset
   gw_nvs.c           — NVS helpers for persistent config (Wi-Fi, CAN IDs, bitrate)
@@ -82,7 +88,10 @@ main/
 
 webui/
   index.html         — Single-page app (Console + Setup panes)
-  app.js             — GatewayClient WebSocket class; UDS helpers; live CAN monitor
+  app.js             — GatewayClient WebSocket class; UDS helpers; live CAN monitor;
+                        ODIS Config Writer; ECU sidebar; Raw UDS send; ASC export
+                        udsReq() throws on non-positive status, using r.message
+                        from server when present (covers DTC/session/DID helpers)
   app.css            — Styles
 
 sdkconfig.defaults   — Non-default Kconfig: 240 MHz, 1 kHz tick, TWAI ISR in IRAM,
@@ -149,7 +158,7 @@ Total queue heap: ~26 KB. HTTP server needs ~40 KB to start.
 ### Browser → ESP32
 
 ```jsonc
-// Send UDS request
+// Send UDS request (any SID — generic pass-through)
 {"type":"uds_request","id":"abc123","tx_id":"0x7E0","rx_id":"0x7E8",
  "sid":"0x22","data":"F190","timeout_ms":2000}
 
@@ -162,6 +171,12 @@ Total queue heap: ~26 KB. HTTP server needs ~40 KB to start.
 {"type":"flash_upload_chunk","id":"x","offset":0,"data_b64":"AAEC..."}
 ```
 
+`data` field is plain hex without `0x` prefix or spaces. SID is excluded
+(firmware prepends it). Examples:
+- SID 0x22, DID 0xF190 → `"sid":"0x22","data":"F190"`
+- SID 0x2E, DID 0x04FF, value 0x01 → `"sid":"0x2E","data":"04FF01"`
+- SID 0x3D WriteMemoryByAddress → `"sid":"0x3D","data":"24000001000002AABB..."` (browser-side only)
+
 ### ESP32 → Browser
 
 ```jsonc
@@ -169,13 +184,63 @@ Total queue heap: ~26 KB. HTTP server needs ~40 KB to start.
 {"type":"uds_response","id":"abc123","status":"positive",
  "sid":"0x62","data":"F190...","elapsed_ms":45}
 
-// Live CAN frame (broadcast, no id)
+// Live CAN frame (broadcast, no id) — emitted by send_can_frame_json()
 {"type":"can_frame","ts":"12.345","dir":"RX","id":"7E8",
  "data":"06 62 F1 90 31 32 33","info":""}
 
 // Flash progress
 {"type":"flash_progress","phase":"erase","done":0,"total":131072}
 ```
+
+`ts` in `can_frame` is seconds from device boot (float, 3 decimal places).
+`dir` is `"RX"` or `"TX"` from the gateway's perspective.
+
+---
+
+## Console Tabs
+
+| Tab | Function |
+|---|---|
+| **Overview** | Vehicle identity (VIN/Part/SW), Bus activity sparkline (live fps), DTC list, Raw UDS send widget |
+| **Live** | All CAN frames real-time (RX+TX), filter by ID/data/direction, Export .ASC, pause/clear |
+| **DTC** | Trouble codes read via SID 0x19 |
+| **Flash** | Firmware upload (binary) via 0x34/0x36/0x37 sequence |
+| **Config** | ODIS XML dataset writer (kalibrierung + parametrierung + service42) |
+
+### ECU Sidebar
+Clicking an ECU preset in the sidebar sets `canTxId`/`canRxId` inputs which
+are read by `curIds()` for all console operations (Raw UDS, Read Vehicle, DTC).
+
+Presets: ECM (0x7E0/0x7E8), Transmission (0x7E1/0x7E9),
+ABS (0x7E2/0x7EA), Body Control (0x760/0x768).
+
+### Raw UDS Widget (Overview tab)
+Ad-hoc request from the browser: enter SID + hex data + timeout, press Send
+or Enter. Response shown inline (positive with data, or NRC with name).
+Uses `curIds()` — matches whichever ECU is active in the sidebar.
+
+### ODIS Config Writer (Config tab)
+Parses VW ODIS XML datasets from ODIS-Engineering / ODIS-S exports:
+- `antwort_sg_konfig_kalibrierung.xml` → `GetAdjustCalibrationData`
+  → N × SID 0x2E WriteDataByIdentifier (DID + calibration bytes)
+- `antwort_sg_konfig_parametrierung.xml` → `GetParametrizeData`
+  → param block write via SID 0x3D WriteMemoryByAddress or 0x34/0x36/0x37
+- `antwort_sg_konfig_service42.xml` → `GetRepairAdvice` → metadata (VIN, change code)
+
+Security: SID 0x27 seed→key flow. Seed shown in log; user enters computed
+key in "Manual Key" field. LOGIN attribute in XML is informational (VW
+workshop login code), not automatically sent.
+
+### Export .ASC (Live tab)
+Exports `FRAMES[]` in Vector ASC format (readable by CANalyzer, PEAK PCAN-View,
+SavvyCAN, etc.):
+```
+date Fri Apr 25 10:30:00.000 2026
+base hex  timestamps absolute
+internal events logged
+      12.345000 1  7E8             Rx   d 8 06 62 F1 90 31 32 33 00
+```
+Timestamps are seconds from `performance.now()` (relative to page load).
 
 ---
 
@@ -189,8 +254,8 @@ Total queue heap: ~26 KB. HTTP server needs ~40 KB to start.
   directly without `xSemaphoreGive`.
 
 - **`curIds()` in app.js**: reads `$('canTxId').value` / `$('canRxId').value`
-  which are populated by `loadSetupConfig()` from `/api/config` at page load.
-  Defaults to `0x7E0`/`0x7E8` if the inputs are empty.
+  which are populated by `loadSetupConfig()` from `/api/config` at page load
+  AND updated by sidebar ECU clicks. Defaults to `0x7E0`/`0x7E8` if empty.
 
 - **`ws_proto_pump_task`** uses a 20 ms timeout (not `portMAX_DELAY`) so it
   can drain `q_can_monitor` between UDS responses.
@@ -200,6 +265,23 @@ Total queue heap: ~26 KB. HTTP server needs ~40 KB to start.
 
 - **`seed_to_key.c`**: stub implementation. Replace `seed_to_key_fn` with
   the OEM-specific algorithm before production deployment.
+
+- **CAN ID validation in `ws_proto.c`**: `tx_id` and `rx_id` are rejected
+  if > 0x7FF. `isotp_layer` always sets `extended = false`, so only 11-bit
+  standard IDs are valid. Invalid IDs get an immediate `uds_response` or
+  `flash_start_ack` error; the server's `"message"` field carries the reason.
+
+- **`udsReq()` error propagation**: throws on any non-positive status using
+  `r.message` first, then `NRC 0x<hex>`, then `Error: <status>`. All
+  DTC/session helpers (`readDTCs`, `clearDTCs`, `startSession`, `readDID`)
+  rely on this — do not add per-caller status checks after `udsReq()` calls.
+
+- **SID 0x3D WriteMemoryByAddress**: handled entirely in browser JS (Config tab).
+  The firmware `uds_task` forwards it to the ECU generically as a raw
+  `uds_request`. No firmware change needed.
+
+- **ODIS parametrization data format**: `0xFE,0xAA,0xBB,0xCC,...` is the
+  raw byte content to write; `0xFE` is NOT a protocol opcode — it is data.
 
 ---
 
