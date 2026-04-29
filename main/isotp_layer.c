@@ -26,6 +26,7 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "freertos/semphr.h"
+#include "freertos/task.h"    /* xTaskGetTickCount, TickType_t */
 #include <string.h>
 
 static const char *TAG = "ISOTP";
@@ -97,6 +98,19 @@ static isotp_tx_state_t tx_state;
 static SemaphoreHandle_t tx_mutex = NULL;
 
 /* ------------------------------------------------------------------ */
+/* Ultima coppia TX/RX usata per rispondere correttamente al FC       */
+/* quando la richiesta era un SF e tx_state è già tornato IDLE.       */
+/* ------------------------------------------------------------------ */
+typedef struct {
+    uint32_t   tx_id;
+    uint32_t   rx_id;
+    TickType_t timestamp;
+} last_tx_t;
+
+static last_tx_t s_last_tx;
+#define LAST_TX_VALID_MS 500
+
+/* ------------------------------------------------------------------ */
 /* Init (da chiamare prima di isotp_send e prima dello start del task) */
 /* ------------------------------------------------------------------ */
 void isotp_init(void)
@@ -109,6 +123,7 @@ void isotp_init(void)
         tx_state.done_sem = xSemaphoreCreateBinary();
         configASSERT(tx_state.done_sem);
     }
+    memset(&s_last_tx, 0, sizeof(s_last_tx));
 }
 
 /* ------------------------------------------------------------------ */
@@ -186,6 +201,15 @@ bool isotp_send(uint32_t tx_id, uint32_t rx_id_fc,
 
     if (len <= 7) {
         bool ok = send_sf(tx_id, data, (uint8_t)len);
+        if (ok) {
+            s_last_tx.tx_id = tx_id;
+            s_last_tx.rx_id = rx_id_fc;
+            s_last_tx.timestamp = xTaskGetTickCount();
+            ESP_LOGW(TAG, "SF sent tx=0x%03X rx_fc=0x%03X len=%u",
+                     (unsigned)tx_id, (unsigned)rx_id_fc, (unsigned)len);
+        } else {
+            ESP_LOGW(TAG, "SF enqueue failed tx=0x%03X", (unsigned)tx_id);
+        }
         xSemaphoreGive(tx_mutex);
         return ok;
     }
@@ -322,8 +346,7 @@ static void deliver_rx(uint32_t rx_id, const uint8_t *buf, uint16_t len)
     msg.length = len;
     memcpy(msg.data, buf, len);
     if (xQueueSend(q_isotp_rx, &msg, pdMS_TO_TICKS(10)) != pdTRUE) {
-        ESP_LOGW(TAG, "q_isotp_rx full, dropped msg rx_id=0x%03X len=%u",
-                 (unsigned)rx_id, (unsigned)len);
+        ESP_LOGW(TAG, "q_isotp_rx full, dropped msg rx_id=0x%03X len=%u",(unsigned)rx_id, (unsigned)len);
     }
 }
 
@@ -336,13 +359,20 @@ static void handle_rx_frame(const twai_frame_t *f)
         case PCI_SF: {
             uint8_t len = f->data[0] & 0x0F;
             if (len == 0 || len > 7) return;
+            if (f->dlc < (uint8_t)(len + 1)) return;
             deliver_rx(f->id, &f->data[1], len);
             break;
         }
         case PCI_FF: {
+            if (f->dlc < 8) return;
+            uint16_t dlen = ((uint16_t)(f->data[0] & 0x0F) << 8) | f->data[1];
+            if (dlen < 8 || dlen > ISOTP_MAX_PAYLOAD) {
+                ESP_LOGW(TAG, "FF: invalid DL=%u, ignored", (unsigned)dlen);
+                return;
+            }
             rx_state.active       = true;
             rx_state.rx_id        = f->id;
-            rx_state.expected_len = ((f->data[0] & 0x0F) << 8) | f->data[1];
+            rx_state.expected_len = dlen;
             memcpy(rx_state.buffer, &f->data[2], 6);
             rx_state.received_len = 6;
             rx_state.next_sn      = 1;
@@ -356,10 +386,16 @@ static void handle_rx_frame(const twai_frame_t *f)
              * Fallback a f->id - 8 solo per frame non sollecitati.
              */
             uint32_t fc_addr;
-            if (tx_state.state != TX_IDLE && f->id == tx_state.rx_id)
+            if (tx_state.state != TX_IDLE && f->id == tx_state.rx_id) {
                 fc_addr = tx_state.tx_id;
-            else
-                fc_addr = f->id - 8;   /* OBD-II fallback */
+            } else if (s_last_tx.timestamp &&
+                       (xTaskGetTickCount() - s_last_tx.timestamp) < pdMS_TO_TICKS(LAST_TX_VALID_MS) &&
+                       f->id == s_last_tx.rx_id) {
+                fc_addr = s_last_tx.tx_id;
+            } else {
+                fc_addr = (f->id >= 8) ? (f->id - 8) : 0;   /* OBD-II fallback */
+            }
+            ESP_LOGI(TAG, "FF rx_id=0x%03X -> FC tx_id=0x%03X", (unsigned)f->id, (unsigned)fc_addr);
             send_fc_cts(fc_addr);
             break;
         }
@@ -372,8 +408,14 @@ static void handle_rx_frame(const twai_frame_t *f)
                 rx_state.active = false;
                 return;
             }
+            /* Guard: should not happen if FF was validated, but be safe. */
+            if (rx_state.received_len >= rx_state.expected_len) {
+                rx_state.active = false;
+                return;
+            }
             uint16_t rem     = rx_state.expected_len - rx_state.received_len;
             uint16_t to_copy = rem > 7 ? 7 : rem;
+            if (f->dlc < (uint8_t)(to_copy + 1)) return;
             memcpy(&rx_state.buffer[rx_state.received_len],
                    &f->data[1], to_copy);
             rx_state.received_len += to_copy;

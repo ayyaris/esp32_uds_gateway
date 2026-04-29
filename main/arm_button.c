@@ -16,11 +16,14 @@
 #include "status_led.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
+#include "freertos/task.h"    /* vTaskDelay, xTaskGetTickCount */
 
 static const char *TAG = "ARM";
 
 #define DEBOUNCE_MS          50
 #define LONG_PRESS_MS        3000
+
+static portMUX_TYPE g_arm_spinlock = portMUX_INITIALIZER_UNLOCKED;
 
 typedef enum {
     ARM_DISARMED,
@@ -28,8 +31,8 @@ typedef enum {
     ARM_EXTENDED,
 } arm_state_t;
 
-static volatile arm_state_t g_state = ARM_DISARMED;
-static TickType_t           g_armed_at = 0;
+static volatile arm_state_t g_state    = ARM_DISARMED;
+static volatile TickType_t  g_armed_at = 0;
 
 bool arm_button_is_armed(void)
 {
@@ -37,8 +40,11 @@ bool arm_button_is_armed(void)
 
     /* timeout automatico in stato ARM_TIMED */
     if (g_state == ARM_TIMED) {
+        taskENTER_CRITICAL(&g_arm_spinlock);
+        TickType_t armed_at = g_armed_at;
+        taskEXIT_CRITICAL(&g_arm_spinlock);
         TickType_t elapsed_ms =
-            (xTaskGetTickCount() - g_armed_at) * portTICK_PERIOD_MS;
+            (xTaskGetTickCount() - armed_at) * portTICK_PERIOD_MS;
         if (elapsed_ms > ARM_TIMEOUT_MS) {
             g_state = ARM_DISARMED;
             ESP_LOGW(TAG, "arm timeout, disarmed");
@@ -91,8 +97,10 @@ void arm_button_task(void *arg)
             /* pressione: arma (timed) */
             press_start   = xTaskGetTickCount();
             press_tracked = true;
-            g_state       = ARM_TIMED;
-            g_armed_at    = press_start;
+            taskENTER_CRITICAL(&g_arm_spinlock);
+            g_armed_at = press_start;
+            g_state    = ARM_TIMED;
+            taskEXIT_CRITICAL(&g_arm_spinlock);
             ESP_LOGI(TAG, "ARMED for %d s", ARM_TIMEOUT_MS / 1000);
             led_set_state(LED_STATE_ARMED);
         } else {

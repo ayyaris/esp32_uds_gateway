@@ -168,7 +168,7 @@ else if(a==='read-ecu-dtc'){
         const r=await client.request({type:'uds_request',tx_id:tx,rx_id:rx,sid:'0x19',data:'02FF',timeout_ms:3000},5000);
         if(r.status!=='positive')throw new Error(r.message||'NRC 0x'+hb(r.nrc||0));
         const b=(r.data||'').trim().split(/\s+/).filter(Boolean);
-        /* strip positive SID byte (0x59) and subfunction, leave DTC bytes from index 2 */
+        if(b[0]?.toLowerCase()!=='59')throw new Error('unexpected response SID 0x'+(b[0]||'?'));
         const dtcs=[];
         for(let i=2;i+3<b.length;i+=4){
             const code=(parseInt(b[i],16)<<16)|(parseInt(b[i+1],16)<<8)|parseInt(b[i+2],16);
@@ -243,7 +243,7 @@ $$('.app-console .tb-tab').forEach(t=>t.addEventListener('click',()=>{$$('.app-c
 const curIds=()=>({tx:($('canTxId')?.value.trim()||'0x7E0'),rx:($('canRxId')?.value.trim()||'0x7E8')});
 async function udsReq(sid,data='',t=2000){const{tx,rx}=curIds();const r=await client.request({type:'uds_request',tx_id:tx,rx_id:rx,sid:`0x${hb(sid)}`,data,timeout_ms:t},t+2000);if(r.status!=='positive')throw new Error(r.message||(r.nrc?'NRC 0x'+hb(r.nrc):'Error: '+r.status));return r}
 async function readDID(d){const r=await udsReq(0x22,hw(d));return h2b(r.data).slice(2)}
-async function readDTCs(){const r=await udsReq(0x19,'02FF',3000);const b=h2b(r.data),out=[];for(let i=2;i+3<b.length;i+=4){const[b0,b1,b2,st]=[b[i],b[i+1],b[i+2],b[i+3]];const grp=['P','C','B','U'][(b0>>6)&3];const code=grp+((b0>>4)&3).toString(10)+(b0&0x0F).toString(16).toUpperCase()+((b1>>4)&0x0F).toString(16).toUpperCase()+(b1&0x0F).toString(16).toUpperCase();out.push({code,raw:`${hb(b0)}${hb(b1)}${hb(b2)}`,failType:b2,status:st})}return out}
+async function readDTCs(){const r=await udsReq(0x19,'02FF',3000);const b=h2b(r.data);if(b[0]!==0x59)throw new Error('unexpected response SID 0x'+hb(b[0]||0));const out=[];for(let i=2;i+3<b.length;i+=4){const[b0,b1,b2,st]=[b[i],b[i+1],b[i+2],b[i+3]];const grp=['P','C','B','U'][(b0>>6)&3];const code=grp+((b0>>4)&3).toString(10)+(b0&0x0F).toString(16).toUpperCase()+((b1>>4)&0x0F).toString(16).toUpperCase()+(b1&0x0F).toString(16).toUpperCase();out.push({code,raw:`${hb(b0)}${hb(b1)}${hb(b2)}`,failType:b2,status:st})}return out}
 async function clearDTCs(){await udsReq(0x14,'FFFFFF',3000)}
 async function startSession(t){await udsReq(0x10,hb(t))}
 
