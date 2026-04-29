@@ -167,12 +167,12 @@ else if(a==='read-ecu-dtc'){
         await client.request({type:'uds_request',tx_id:tx,rx_id:rx,sid:'0x10',data:'03',timeout_ms:1500},3000);
         const r=await client.request({type:'uds_request',tx_id:tx,rx_id:rx,sid:'0x19',data:'02FF',timeout_ms:3000},5000);
         if(r.status!=='positive')throw new Error(r.message||'NRC 0x'+hb(r.nrc||0));
-        const b=(r.data||'').trim().split(/\s+/).filter(Boolean);
-        if(b[0]?.toLowerCase()!=='59')throw new Error('unexpected response SID 0x'+(b[0]||'?'));
+        const b=h2b(r.data);
+        if(b[0]!==0x59)throw new Error('unexpected response SID 0x'+hb(b[0]||0));
         const dtcs=[];
         for(let i=2;i+3<b.length;i+=4){
-            const code=(parseInt(b[i],16)<<16)|(parseInt(b[i+1],16)<<8)|parseInt(b[i+2],16);
-            const st=parseInt(b[i+3],16);
+            const code=(b[i]<<16)|(b[i+1]<<8)|b[i+2];
+            const st=b[i+3];
             const prefix=['P','C','B','U'][(code>>22)&3];
             const num=code&0x3FFFFF;
             dtcs.push({code:prefix+num.toString(16).toUpperCase().padStart(4,'0'),status:st});
